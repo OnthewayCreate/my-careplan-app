@@ -1,16 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Calendar, Plus, Trash2, CheckCircle, AlertCircle, FileText, User, ChevronDown, ChevronUp, Heart, LogOut, Save, Loader2, Lock, Mail } from 'lucide-react';
-// Firebase Imports - Fixed for React Environment
-import { initializeApp } from "firebase/app";
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot } from "firebase/firestore";
 
-// --- Firebase初期化 & 設定 ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// ★修正ポイント: 外部サーバー(Firebase)を使わず、まずは動くようにしています
+// 将来的に本物のサーバーにつなぐときは、ここを設定します
+const USE_FIREBASE = false; 
 
 // --- 定数・データ定義 ---
 const CARE_LEVELS = [
@@ -38,13 +31,12 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Auth Listener
+  // 擬似的なログインチェック
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
+    // 0.5秒後に「ロード完了」とする
+    setTimeout(() => {
       setLoading(false);
-    });
-    return () => unsubscribe();
+    }, 500);
   }, []);
 
   if (loading) {
@@ -57,54 +49,28 @@ export default function App() {
 
   // ログインしていない場合は認証画面を表示
   if (!user) {
-    return <AuthScreen />;
+    return <AuthScreen onLogin={(email) => setUser({ email, uid: 'demo-user' })} />;
   }
 
   // ログインしている場合はメインアプリを表示
-  return <CarePlanApp user={user} />;
+  return <CarePlanApp user={user} onLogout={() => setUser(null)} />;
 }
 
-// --- 認証画面コンポーネント (Login/Signup) ---
-function AuthScreen() {
-  const [isLogin, setIsLogin] = useState(true);
+// --- 認証画面コンポーネント ---
+function AuthScreen({ onLogin }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleAuth = async (e) => {
+  const handleAuth = (e) => {
     e.preventDefault();
     setIsLoading(true);
-    setError('');
-
-    try {
-      // ※注: このプレビュー環境では、便宜上、常に「匿名認証」を使用してログインを成功させます。
-      // 本番環境でFirebase AuthのEmail/Passwordプロバイダを有効にした場合は、
-      // 以下のコメントアウト部分（signInWithEmailAndPassword等）を使用してください。
-      
-      /* 本番用コードの例:
-      if (isLogin) {
-        await signInWithEmailAndPassword(auth, email, password);
-      } else {
-        await createUserWithEmailAndPassword(auth, email, password);
-      }
-      */
-
-      // プレビュー環境用のフォールバック処理
-      // 環境変数トークンがあればそれを使用、なければ匿名認証
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-      
-      // 成功時は自動的にAppコンポーネント側で検知されて画面遷移します
-    } catch (err) {
-      console.error(err);
-      setError('ログインに失敗しました。しばらく待ってから再度お試しください。');
-    } finally {
+    
+    // 擬似ログイン処理
+    setTimeout(() => {
       setIsLoading(false);
-    }
+      onLogin(email || 'guest@example.com');
+    }, 800);
   };
 
   return (
@@ -119,15 +85,11 @@ function AuthScreen() {
         </div>
 
         <div className="p-8">
-          <h2 className="text-xl font-bold text-slate-700 mb-6 text-center">
-            {isLogin ? 'ログイン' : '新規アカウント登録'}
-          </h2>
+          <h2 className="text-xl font-bold text-slate-700 mb-6 text-center">ログイン</h2>
 
-          {error && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm mb-4 flex items-center gap-2">
-              <AlertCircle size={16} /> {error}
-            </div>
-          )}
+          <div className="bg-yellow-50 text-yellow-700 p-3 rounded-lg text-sm mb-4">
+            💡 現在はデモモードです。好きなメールアドレスでログインできます。
+          </div>
 
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
@@ -136,10 +98,9 @@ function AuthScreen() {
                 <Mail className="absolute left-3 top-3 text-slate-400" size={18} />
                 <input 
                   type="email" 
-                  required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
                   placeholder="example@email.com"
                 />
               </div>
@@ -151,12 +112,10 @@ function AuthScreen() {
                 <Lock className="absolute left-3 top-3 text-slate-400" size={18} />
                 <input 
                   type="password" 
-                  required
-                  minLength={6}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                  placeholder="6文字以上"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                  placeholder="なんでもOK"
                 />
               </div>
             </div>
@@ -167,24 +126,9 @@ function AuthScreen() {
               className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded-lg transition shadow-md flex justify-center items-center gap-2 disabled:opacity-50"
             >
               {isLoading && <Loader2 className="animate-spin" size={18} />}
-              {isLogin ? 'ログインして始める' : 'アカウントを作成'}
+              ログインして始める
             </button>
           </form>
-          
-          {/* プレビュー環境用の注釈 */}
-          <div className="mt-4 p-3 bg-blue-50 text-blue-700 text-xs rounded-lg">
-            <p className="font-bold mb-1">💡 開発プレビューモード</p>
-            この環境では実際にはパスワード検証を行わず、デモ用IDでログインします。任意のメール・パスワードで試せます。
-          </div>
-
-          <div className="mt-6 text-center">
-            <button 
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-blue-600 hover:underline hover:text-blue-700"
-            >
-              {isLogin ? 'アカウントをお持ちでない方はこちら' : 'すでにアカウントをお持ちの方はこちら'}
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -192,9 +136,8 @@ function AuthScreen() {
 }
 
 
-// --- アプリ本体 (CarePlanApp) ---
-function CarePlanApp({ user }) {
-  // --- State ---
+// --- アプリ本体 ---
+function CarePlanApp({ user, onLogout }) {
   const [selectedLevel, setSelectedLevel] = useState(CARE_LEVELS[2]); 
   const [weeklyPlan, setWeeklyPlan] = useState({
     '月': [], '火': [], '水': [], '木': [], '金': [], '土': [], '日': [],
@@ -204,60 +147,15 @@ function CarePlanApp({ user }) {
   const [selectedDayForAdd, setSelectedDayForAdd] = useState(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [lastSaved, setLastSaved] = useState(null);
 
-  // --- Firestore Sync Logic ---
-  
-  // データ読み込み (初回のみ)
-  useEffect(() => {
-    if (!user) return;
-    
-    const planDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'careplans', 'current');
-    
-    // リアルタイムリスナーをセット
-    const unsubscribe = onSnapshot(planDocRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        if (data.weeklyPlan) setWeeklyPlan(data.weeklyPlan);
-        if (data.selectedLevel) setSelectedLevel(data.selectedLevel);
-        if (data.updatedAt) setLastSaved(data.updatedAt.toDate());
-      }
-    }, (error) => {
-      console.error("Error getting document:", error);
-    });
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // データ保存
-  const handleSave = async () => {
-    if (!user) return;
+  const handleSave = () => {
     setIsSaving(true);
-
-    try {
-      const planDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'careplans', 'current');
-      await setDoc(planDocRef, {
-        weeklyPlan,
-        selectedLevel,
-        updatedAt: new Date(),
-        userId: user.uid
-      });
-      setLastSaved(new Date());
-      setShowSuccess(true);
-    } catch (error) {
-      console.error("Error saving document:", error);
-      alert("保存に失敗しました");
-    } finally {
+    // 保存のフリ
+    setTimeout(() => {
       setIsSaving(false);
-    }
+      setShowSuccess(true);
+    }, 1000);
   };
-
-  // ログアウト
-  const handleLogout = () => {
-    signOut(auth);
-  };
-
-  // --- Logic (Existing) ---
 
   const addService = (day, service) => {
     if (day === 'monthly') {
@@ -293,7 +191,6 @@ function CarePlanApp({ user }) {
     return total;
   }, [weeklyPlan]);
 
-  const usageRate = Math.min((totalUnits / selectedLevel.maxUnits) * 100, 100);
   const isOverLimit = totalUnits > selectedLevel.maxUnits;
 
   const calculateCost = () => {
@@ -307,8 +204,6 @@ function CarePlanApp({ user }) {
     }
   };
 
-  // --- UI Components ---
-
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-20">
       
@@ -319,13 +214,13 @@ function CarePlanApp({ user }) {
             <Heart className="text-pink-500 fill-pink-500" size={24} />
             <h1 className="text-xl font-bold text-slate-700 hidden md:block">マイケアプラン</h1>
             <span className="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded-full">
-              {user.isAnonymous ? 'ゲストモード' : user.email}
+              {user.email}
             </span>
           </div>
           
           <div className="flex items-center gap-2">
              <button 
-               onClick={handleLogout}
+               onClick={onLogout}
                className="text-slate-400 hover:text-slate-600 p-2 rounded-full hover:bg-slate-100"
                title="ログアウト"
              >
@@ -348,8 +243,6 @@ function CarePlanApp({ user }) {
         {/* Status Section */}
         <section className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            
-            {/* Care Level Selector */}
             <div className="flex-1">
               <label className="block text-sm text-slate-500 mb-2 font-medium">ご本人の要介護度</label>
               <div className="flex flex-wrap gap-2">
@@ -369,7 +262,6 @@ function CarePlanApp({ user }) {
               </div>
             </div>
 
-            {/* Unit Monitor */}
             <div className="flex-1 bg-slate-50 rounded-xl p-4 border border-slate-200">
               <div className="flex justify-between items-end mb-2">
                 <span className="text-sm font-bold text-slate-500">利用単位数（月間目安）</span>
@@ -380,16 +272,12 @@ function CarePlanApp({ user }) {
                   <span className="text-slate-400 text-sm"> / {selectedLevel.maxUnits.toLocaleString()} 単位</span>
                 </div>
               </div>
-              
-              {/* Progress Bar */}
               <div className="h-3 w-full bg-slate-200 rounded-full overflow-hidden">
                 <div 
                   className={`h-full transition-all duration-500 ${isOverLimit ? 'bg-red-500' : 'bg-blue-500'}`}
                   style={{ width: `${Math.min((totalUnits / selectedLevel.maxUnits) * 100, 100)}%` }}
                 />
               </div>
-
-              {/* Alert & Cost */}
               <div className="mt-3 flex justify-between items-start text-sm">
                 <div>
                   {isOverLimit && (
@@ -407,7 +295,7 @@ function CarePlanApp({ user }) {
           </div>
         </section>
 
-        {/* Monthly Services (Rental etc) */}
+        {/* Monthly Services */}
         <section>
           <h2 className="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
             <span className="bg-orange-100 text-orange-600 p-1 rounded">毎月</span> 
@@ -437,7 +325,6 @@ function CarePlanApp({ user }) {
           <h2 className="text-lg font-bold text-slate-700 mb-3 flex items-center gap-2">
             <Calendar size={20} /> 週間スケジュール
           </h2>
-          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {DAYS.map((day) => (
               <div key={day} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
@@ -449,7 +336,6 @@ function CarePlanApp({ user }) {
                       : '予定なし'}
                   </span>
                 </div>
-
                 <div className="space-y-2">
                   {weeklyPlan[day].map((service) => (
                     <ServiceCard 
@@ -458,7 +344,6 @@ function CarePlanApp({ user }) {
                       onRemove={() => removeService(day, service.instanceId)} 
                     />
                   ))}
-                  
                   <button 
                     onClick={() => { setSelectedDayForAdd(day); setIsModalOpen(true); }}
                     className="w-full py-2 rounded-lg border border-dashed border-slate-200 text-slate-400 hover:bg-slate-50 hover:text-blue-500 transition text-sm flex justify-center items-center gap-1"
@@ -472,7 +357,7 @@ function CarePlanApp({ user }) {
         </section>
       </main>
 
-      {/* Service Selection Modal */}
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl animate-in fade-in zoom-in duration-200">
@@ -484,7 +369,6 @@ function CarePlanApp({ user }) {
                 閉じる
               </button>
             </div>
-            
             <div className="overflow-y-auto p-4 space-y-2">
               {SERVICES.filter(s => selectedDayForAdd === 'monthly' ? s.isMonthly : !s.isMonthly).map((service) => (
                 <button
@@ -507,10 +391,6 @@ function CarePlanApp({ user }) {
                   </div>
                 </button>
               ))}
-              
-              {SERVICES.filter(s => selectedDayForAdd === 'monthly' ? s.isMonthly : !s.isMonthly).length === 0 && (
-                <p className="text-center text-slate-400 py-4">利用可能なサービスがありません</p>
-              )}
             </div>
           </div>
         </div>
@@ -523,13 +403,9 @@ function CarePlanApp({ user }) {
             <div className="w-20 h-20 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle size={48} />
             </div>
-            <h2 className="text-2xl font-bold text-slate-800 mb-2">クラウドに保存しました</h2>
+            <h2 className="text-2xl font-bold text-slate-800 mb-2">保存しました（デモ）</h2>
             <p className="text-slate-200 mb-6">
-              次回ログイン時にも、この内容から編集を再開できます。
-              <br/>
-              <span className="text-xs opacity-70 text-white mt-2 block">
-                 (最終保存: {lastSaved?.toLocaleString()})
-              </span>
+              これはデモモードのため、ブラウザを閉じるとデータは消えます。
             </p>
             <button 
               onClick={() => setShowSuccess(false)}
